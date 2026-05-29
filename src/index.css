@@ -4,13 +4,19 @@
 * { font-family: 'Inter', sans-serif; }
 body { background-color: #f5f5f5; color: #1a1c1c; }
 
+/* Light sidebar — nav active state: blue bg with white text */
 .nav-active {
-  background-color: rgba(255,255,255,0.08);
-  border-left: 3px solid #b4c5ff;
-  color: #b4c5ff !important;
+  background-color: #2563eb !important;
+  color: #ffffff !important;
   font-weight: 600;
 }
 
-::-webkit-scrollbar { width: 4px; }
+.nav-active svg {
+  color: #ffffff !important;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 4px; height: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: #dadada; border-radius: 10px; }
+::-webkit-scrollbar-thumb:hover { background: #b0b0b0; }
