@@ -9,6 +9,7 @@ import { OrgDetail } from "./pages/organizations/OrgDetail";
 import { PipelineBoard } from "./pages/pipeline/PipelineBoard";
 import { TaskList } from "./pages/tasks/TaskList";
 import { SettingsStages } from "./pages/settings/Stages";
+import { Reports } from "./pages/reports/Reports";
 
 function Wrap({ children }: { children: React.ReactNode }) {
   return (
@@ -41,6 +42,7 @@ export const router = createBrowserRouter([
       { path: "pipeline",          element: <PipelineBoard /> },
       { path: "tasks",             element: <TaskList /> },
       { path: "settings",          element: <SettingsStages /> },
+      { path: "reports",           element: <Reports /> },
     ],
   },
   { path: "*", element: <Navigate to="/dashboard" replace /> },
