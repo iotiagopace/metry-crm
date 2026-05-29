@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { get, post, put, del } from "../lib/api";
+import { useAuth } from "./useAuth";
+import { canSeeAssigned } from "../lib/team";
 
 export interface Stage {
   id: string;
@@ -29,6 +31,7 @@ export interface Opportunity {
 }
 
 export function useOpportunities() {
+  const { user } = useAuth();
   const [opps, setOpps] = useState<Opportunity[]>([]);
   const [stages, setStages] = useState<Stage[]>([]);
   const [loading, setLoading] = useState(true);
@@ -40,12 +43,12 @@ export function useOpportunities() {
         get<Opportunity[]>("/opportunities"),
         get<Stage[]>("/settings/stages"),
       ]);
-      setOpps(oppsData);
+      setOpps(oppsData.filter((opp) => canSeeAssigned(user, opp.owner_id)));
       setStages(stagesData);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [user]);
 
   useEffect(() => {
     load();

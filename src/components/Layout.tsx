@@ -1,12 +1,14 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, Outlet, useLocation, useNavigate } from "react-router";
 import {
   LayoutDashboard, Kanban, CheckSquare,
   BarChart2, Settings, Bell, MessageCircle,
   HelpCircle, Plus, Menu, X, ChevronDown,
-  LogOut, User, Building2,
+  LogOut, User, Building2, Users, Moon, Sun,
 } from "lucide-react";
 import { useAuth } from "../hooks/useAuth";
+import { useContacts } from "../hooks/useContacts";
+import { useTasks } from "../hooks/useTasks";
 
 // ─── Nav structure with hierarchy ─────────────────────────────────────────────
 const NAV_GROUPS = [
@@ -20,6 +22,7 @@ const NAV_GROUPS = [
   {
     group: "Cadastros",
     items: [
+      { to: "/contacts",      label: "Contatos",   Icon: Users },
       { to: "/organizations", label: "Empresas",   Icon: Building2 },
       { to: "/tasks",         label: "Tarefas",    Icon: CheckSquare },
     ],
@@ -54,8 +57,43 @@ export function Layout() {
   const { user, logout, loading } = useAuth();
   const { pathname } = useLocation();
   const navigate = useNavigate();
+  const { tasks } = useTasks();
+  const { contacts } = useContacts();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [dark, setDark] = useState(() => localStorage.getItem("crm_theme") === "dark");
+
+  const today = new Date().toISOString().slice(0, 10);
+  const overdueTasks = tasks.filter((task) => !task.completed && task.due_date < today);
+  const dueTodayTasks = tasks.filter((task) => !task.completed && task.due_date === today);
+  const idleContacts = contacts.filter((contact) => {
+    const dates = contact.opportunities
+      .map((opp) => opp.updated_at ?? opp.created_at)
+      .filter(Boolean)
+      .sort();
+    const lastActivity = dates[dates.length - 1];
+    if (!lastActivity) return false;
+    return Date.now() - new Date(lastActivity).getTime() > 7 * 86400000;
+  });
+  const notifications = [
+    ...overdueTasks.slice(0, 3).map((task) => ({ title: "Tarefa vencida", body: task.title, tone: "red" })),
+    ...dueTodayTasks.slice(0, 3).map((task) => ({ title: "Tarefa para hoje", body: task.title, tone: "amber" })),
+    ...idleContacts.slice(0, 3).map((contact) => ({ title: "Lead parado", body: contact.name, tone: "blue" })),
+  ];
+
+  const toggleTheme = () => {
+    setDark((value) => {
+      const next = !value;
+      document.documentElement.classList.toggle("dark", next);
+      localStorage.setItem("crm_theme", next ? "dark" : "light");
+      return next;
+    });
+  };
+
+  useEffect(() => {
+    document.documentElement.classList.toggle("dark", dark);
+  }, [dark]);
 
   if (loading) return <Spinner />;
 
@@ -182,9 +220,52 @@ export function Layout() {
         </div>
 
         {/* Right actions */}
-        <div className="flex items-center gap-1">
-          <button className="p-2 rounded-lg hover:bg-[#f5f5f5] text-[#434655] transition-colors" aria-label="Notificações">
+        <div className="flex items-center gap-1 relative">
+          <button
+            onClick={() => setNotificationsOpen((value) => !value)}
+            className="relative p-2 rounded-lg hover:bg-[#f5f5f5] text-[#434655] transition-colors"
+            aria-label="Notificações"
+          >
             <Bell size={18} />
+            {notifications.length > 0 && (
+              <span className="absolute right-1.5 top-1.5 w-2 h-2 rounded-full bg-red-500 ring-2 ring-white" />
+            )}
+          </button>
+          {notificationsOpen && (
+            <div className="absolute right-0 top-11 w-80 max-w-[calc(100vw-1.5rem)] bg-white border border-[#e5e5e5] rounded-2xl shadow-xl overflow-hidden z-[80]">
+              <div className="px-4 py-3 border-b border-[#e5e5e5] bg-[#f9f9f9]">
+                <p className="text-sm font-bold text-[#1a1c1c]">Notificações</p>
+                <p className="text-xs text-[#737686]">{notifications.length || "Nenhum"} alerta ativo</p>
+              </div>
+              <div className="max-h-80 overflow-y-auto">
+                {notifications.length === 0 ? (
+                  <p className="px-4 py-6 text-center text-sm text-[#737686]">Tudo em dia por aqui.</p>
+                ) : (
+                  notifications.map((item, index) => (
+                    <div key={`${item.title}-${index}`} className="px-4 py-3 border-b border-[#f5f5f5] last:border-0">
+                      <div className="flex items-start gap-2">
+                        <span
+                          className={`mt-1.5 w-2 h-2 rounded-full shrink-0 ${
+                            item.tone === "red" ? "bg-red-500" : item.tone === "amber" ? "bg-amber-500" : "bg-blue-500"
+                          }`}
+                        />
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-[#1a1c1c]">{item.title}</p>
+                          <p className="text-xs text-[#737686] truncate">{item.body}</p>
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          )}
+          <button
+            onClick={toggleTheme}
+            className="p-2 rounded-lg hover:bg-[#f5f5f5] text-[#434655] transition-colors"
+            aria-label="Alternar tema"
+          >
+            {dark ? <Sun size={18} /> : <Moon size={18} />}
           </button>
           <button className="p-2 rounded-lg hover:bg-[#f5f5f5] text-[#434655] transition-colors hidden sm:flex" aria-label="Mensagens">
             <MessageCircle size={18} />
@@ -204,13 +285,22 @@ export function Layout() {
       </div>
 
       {/* Mobile drawer */}
-      {mobileOpen && (
-        <div className="md:hidden fixed inset-0 z-50 bg-black/40" onClick={() => setMobileOpen(false)}>
-          <div className="absolute inset-y-0 left-0 w-64 bg-white border-r border-[#e5e5e5] flex flex-col" onClick={(e) => e.stopPropagation()}>
-            <SidebarContent />
-          </div>
+      <div
+        className={`md:hidden fixed inset-0 z-[70] transition-opacity duration-200 ${
+          mobileOpen ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
+        }`}
+        onClick={() => setMobileOpen(false)}
+      >
+        <div className="absolute inset-0 bg-black/45" />
+        <div
+          className={`absolute inset-y-0 left-0 w-72 max-w-[86vw] bg-white border-r border-[#e5e5e5] flex flex-col shadow-2xl transition-transform duration-200 ease-out ${
+            mobileOpen ? "translate-x-0" : "-translate-x-full"
+          }`}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <SidebarContent />
         </div>
-      )}
+      </div>
 
       {/* Main content */}
       <main className="flex-1 md:ml-60 pt-14 min-h-screen">

@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { get, post, put, del } from "../lib/api";
+import { useAuth } from "./useAuth";
+import { canSeeAssigned } from "../lib/team";
 
 export interface Task {
   id: string;
@@ -16,17 +18,19 @@ export interface Task {
 }
 
 export function useTasks() {
+  const { user } = useAuth();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      setTasks(await get<Task[]>("/tasks"));
+      const data = await get<Task[]>("/tasks");
+      setTasks(data.filter((task) => canSeeAssigned(user, task.assigned_to)));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [user]);
 
   useEffect(() => {
     load();

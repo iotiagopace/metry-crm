@@ -6,6 +6,8 @@ import { Login } from "./pages/Login";
 import { Dashboard } from "./pages/Dashboard";
 import { OrgList } from "./pages/organizations/OrgList";
 import { OrgDetail } from "./pages/organizations/OrgDetail";
+import { ContactList } from "./pages/contacts/ContactList";
+import { ContactDetail } from "./pages/contacts/ContactDetail";
 import { PipelineBoard } from "./pages/pipeline/PipelineBoard";
 import { TaskList } from "./pages/tasks/TaskList";
 import { SettingsStages } from "./pages/settings/Stages";
@@ -37,6 +39,8 @@ export const router = createBrowserRouter([
     children: [
       { index: true, element: <Navigate to="/dashboard" replace /> },
       { path: "dashboard",         element: <Dashboard /> },
+      { path: "contacts",          element: <ContactList /> },
+      { path: "contacts/:id",      element: <ContactDetail /> },
       { path: "organizations",     element: <OrgList /> },
       { path: "organizations/:id", element: <OrgDetail /> },
       { path: "pipeline",          element: <PipelineBoard /> },

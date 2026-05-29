@@ -3,7 +3,7 @@ import {
   Plus, Trash2, Loader2, Database, Target,
   SlidersHorizontal, Puzzle, Tag, XCircle, Mail,
   Check, AlertTriangle, Zap, Globe, Slack, MessageSquare,
-  BarChart2,
+  BarChart2, Users, UserPlus, ShieldCheck,
 } from "lucide-react";
 import { get, post, del } from "../../lib/api";
 import type { Stage } from "../../hooks/useOpportunities";
@@ -29,6 +29,7 @@ type SettingsTab =
   | "goals"
   | "loss_reasons"
   | "preferences"
+  | "team"
   | "integrations"
   | "segments"
   | "email_templates";
@@ -337,6 +338,96 @@ function PanelPreferences() {
   );
 }
 
+interface TeamMember {
+  id: string;
+  name: string;
+  email: string;
+  role: "admin" | "seller";
+  active: boolean;
+}
+
+function PanelTeam() {
+  const [members, setMembers] = useState<TeamMember[]>(() => {
+    const stored = localStorage.getItem("crm_team_members");
+    if (stored) return JSON.parse(stored) as TeamMember[];
+    const currentUser = JSON.parse(localStorage.getItem("crm_user") || "null") as { id?: string; name?: string; email?: string } | null;
+    return currentUser
+      ? [{ id: currentUser.id ?? "admin", name: currentUser.name ?? "Administrador", email: currentUser.email ?? "", role: "admin", active: true }]
+      : [];
+  });
+  const [form, setForm] = useState({ name: "", email: "", role: "seller" as TeamMember["role"] });
+
+  useEffect(() => {
+    localStorage.setItem("crm_team_members", JSON.stringify(members));
+  }, [members]);
+
+  const addMember = (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!form.name.trim() || !form.email.trim()) return;
+    setMembers((prev) => [
+      ...prev,
+      { id: `member-${Date.now()}`, name: form.name.trim(), email: form.email.trim(), role: form.role, active: true },
+    ]);
+    setForm({ name: "", email: "", role: "seller" });
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="bg-blue-50 border border-blue-200 rounded-2xl p-4 flex gap-3">
+        <ShieldCheck size={18} className="text-blue-600 shrink-0 mt-0.5" />
+        <p className="text-sm text-blue-800">
+          Admin visualiza tudo. Vendedores devem receber leads e oportunidades atribuídas a eles pelo campo responsável.
+        </p>
+      </div>
+
+      <div className="bg-white rounded-2xl border border-[#e5e5e5] overflow-hidden">
+        <div className="px-5 py-4 border-b border-[#e5e5e5] bg-[#f9f9f9]">
+          <h2 className="font-semibold text-[#1a1c1c] text-sm">Equipe Comercial</h2>
+          <p className="text-xs text-[#737686] mt-0.5">Adicione vendedores e defina permissões iniciais</p>
+        </div>
+
+        <div className="divide-y divide-[#f5f5f5]">
+          {members.map((member) => (
+            <div key={member.id} className="flex items-center gap-3 px-5 py-4">
+              <div className="w-9 h-9 rounded-full bg-[#2563eb] text-white flex items-center justify-center text-xs font-bold shrink-0">
+                {member.name.split(" ").slice(0, 2).map((part) => part[0]).join("").toUpperCase()}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-[#1a1c1c] truncate">{member.name}</p>
+                <p className="text-xs text-[#737686] truncate">{member.email}</p>
+              </div>
+              <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${member.role === "admin" ? "bg-blue-50 text-blue-700" : "bg-neutral-100 text-neutral-600"}`}>
+                {member.role === "admin" ? "Admin" : "Vendedor"}
+              </span>
+              <button
+                onClick={() => setMembers((prev) => prev.map((item) => item.id === member.id ? { ...item, active: !item.active } : item))}
+                className={`relative w-11 h-6 rounded-full transition-colors ${member.active ? "bg-[#2563eb]" : "bg-[#d4d4d4]"}`}
+              >
+                <span className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-transform ${member.active ? "left-6" : "left-1"}`} />
+              </button>
+            </div>
+          ))}
+        </div>
+
+        <form onSubmit={addMember} className="grid md:grid-cols-[1fr_1fr_140px_auto] gap-2 px-5 py-4 border-t border-[#e5e5e5] bg-[#f9f9f9]">
+          <input value={form.name} onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))} placeholder="Nome do vendedor"
+            className="px-3 py-2 border border-[#d4d4d4] rounded-xl text-sm focus:ring-2 focus:ring-[#2563eb] outline-none bg-white" />
+          <input type="email" value={form.email} onChange={(e) => setForm((prev) => ({ ...prev, email: e.target.value }))} placeholder="email@empresa.com"
+            className="px-3 py-2 border border-[#d4d4d4] rounded-xl text-sm focus:ring-2 focus:ring-[#2563eb] outline-none bg-white" />
+          <select value={form.role} onChange={(e) => setForm((prev) => ({ ...prev, role: e.target.value as TeamMember["role"] }))}
+            className="px-3 py-2 border border-[#d4d4d4] rounded-xl text-sm focus:ring-2 focus:ring-[#2563eb] outline-none bg-white">
+            <option value="seller">Vendedor</option>
+            <option value="admin">Admin</option>
+          </select>
+          <button className="flex items-center justify-center gap-1.5 px-4 py-2 bg-[#2563eb] hover:bg-blue-700 text-white rounded-xl text-sm font-semibold transition-colors">
+            <UserPlus size={15} /> Adicionar
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 function PanelIntegrations() {
   const [connected, setConnected] = useState<Set<string>>(new Set());
 
@@ -420,6 +511,7 @@ const MENU: { id: SettingsTab; label: string; Icon: React.ElementType; desc: str
   { id: "goals",          label: "Metas",               Icon: Target,            desc: "Padrões de meta de mercado",             group: "Pipeline" },
   { id: "loss_reasons",   label: "Motivos de Perda",    Icon: XCircle,           desc: "Por que negócios são perdidos",          group: "Pipeline" },
   { id: "segments",       label: "Segmentos",           Icon: Tag,               desc: "Categorias de clientes",                 group: "Cadastro" },
+  { id: "team",           label: "Equipe",              Icon: Users,             desc: "Usuários, vendedores e permissões",       group: "Sistema" },
   { id: "preferences",    label: "Preferências",        Icon: Database,          desc: "Configurações gerais do CRM",            group: "Sistema" },
   { id: "integrations",   label: "Integrações",         Icon: Puzzle,            desc: "Conecte ferramentas externas",           group: "Sistema" },
   { id: "email_templates",label: "Modelos de E-mail",   Icon: Mail,              desc: "Templates para comunicação",             group: "Comunicação" },
@@ -438,6 +530,7 @@ export function SettingsStages() {
       case "preferences":    return <PanelPreferences />;
       case "integrations":   return <PanelIntegrations />;
       case "segments":       return <PanelSegments />;
+      case "team":           return <PanelTeam />;
       case "email_templates":
         return (
           <div className="bg-white rounded-2xl border border-[#e5e5e5] p-8 text-center text-[#737686]">

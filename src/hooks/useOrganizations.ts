@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { get, post, put, del } from "../lib/api";
+import { useAuth } from "./useAuth";
+import { canSeeAssigned } from "../lib/team";
 
 export interface Organization {
   id: string;
@@ -16,6 +18,7 @@ export interface Organization {
 }
 
 export function useOrganizations() {
+  const { user } = useAuth();
   const [orgs, setOrgs] = useState<Organization[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -24,13 +27,14 @@ export function useOrganizations() {
     setLoading(true);
     setError(null);
     try {
-      setOrgs(await get<Organization[]>("/organizations"));
+      const data = await get<Organization[]>("/organizations");
+      setOrgs(data.filter((org) => canSeeAssigned(user, org.owner_id)));
     } catch (e) {
       setError(String(e));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [user]);
 
   useEffect(() => {
     load();
