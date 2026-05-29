@@ -2,8 +2,8 @@ import { useState, useEffect } from "react";
 import {
   Plus, Trash2, Loader2, Database, Target,
   SlidersHorizontal, Puzzle, Tag, XCircle, Mail,
-  Check, AlertTriangle, Zap, Globe, Slack, MessageSquare,
-  BarChart2, Users, UserPlus, ShieldCheck,
+  Check, AlertTriangle,
+  BarChart2, Users, UserPlus, ShieldCheck, Building2,
 } from "lucide-react";
 import { get, post, del } from "../../lib/api";
 import type { Stage } from "../../hooks/useOpportunities";
@@ -25,14 +25,45 @@ interface LossReason {
 }
 
 type SettingsTab =
+  | "tenants"
   | "stages"
   | "goals"
   | "loss_reasons"
   | "preferences"
   | "team"
   | "integrations"
+  | "ingestion_logs"
   | "segments"
   | "email_templates";
+
+interface Tenant {
+  id: string;
+  name: string;
+  slug: string;
+  domain?: string;
+  status: "active" | "paused" | "archived";
+  default_lead_source: string;
+  created_at: string;
+}
+
+interface Integration {
+  id: string;
+  tenant_id: string;
+  type: "site" | "meta" | "whatsapp" | "manual" | "webhook";
+  name: string;
+  status: "active" | "paused" | "error";
+  config: Record<string, unknown>;
+  last_event_at?: string;
+  created_at: string;
+}
+
+interface IngestionLog {
+  id: string;
+  source: string;
+  status: "received" | "created" | "duplicate" | "error" | "rejected";
+  message?: string;
+  created_at: string;
+}
 
 // ─── Default data ─────────────────────────────────────────────────────────────
 const DEFAULT_GOALS: GoalTemplate[] = [
@@ -52,15 +83,6 @@ const DEFAULT_LOSS_REASONS: LossReason[] = [
   { id: "lr5", label: "Produto não atende necessidade", count: 0 },
   { id: "lr6", label: "Falta de urgência / timing",     count: 0 },
   { id: "lr7", label: "Contato perdido / sem resposta", count: 0 },
-];
-
-const INTEGRATIONS = [
-  { icon: Mail,         name: "Gmail / Google Workspace", desc: "Sincronize e-mails e calendário",        status: "available", color: "#ea4335" },
-  { icon: Slack,        name: "Slack",                    desc: "Notificações em tempo real no canal",    status: "available", color: "#4a154b" },
-  { icon: MessageSquare,name: "WhatsApp Business",        desc: "Envio e recepção de mensagens",          status: "available", color: "#25d366" },
-  { icon: Globe,        name: "RD Station",               desc: "Importe leads do seu funil de marketing",status: "available", color: "#2563eb" },
-  { icon: Zap,          name: "Zapier",                   desc: "Conecte mais de 5.000 aplicativos",      status: "available", color: "#ff4a00" },
-  { icon: BarChart2,    name: "Google Analytics",         desc: "Rastreie conversões de leads",           status: "available", color: "#e37400" },
 ];
 
 const PERIOD_LABELS: Record<string, string> = {
@@ -338,37 +360,128 @@ function PanelPreferences() {
   );
 }
 
+function PanelTenants() {
+  const [tenants, setTenants] = useState<Tenant[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [createdKey, setCreatedKey] = useState("");
+  const [form, setForm] = useState({ name: "", slug: "", domain: "", default_lead_source: "site_form" });
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      setTenants(await get<Tenant[]>("/tenants"));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { load(); }, []);
+
+  const createTenant = async (event: React.FormEvent) => {
+    event.preventDefault();
+    const result = await post<{ tenant: Tenant; ingestion_key: string }>("/tenants", {
+      name: form.name,
+      slug: form.slug || undefined,
+      domain: form.domain || undefined,
+      default_lead_source: form.default_lead_source,
+    });
+    setCreatedKey(result.ingestion_key);
+    setForm({ name: "", slug: "", domain: "", default_lead_source: "site_form" });
+    await load();
+  };
+
+  return (
+    <div className="space-y-4">
+      {createdKey && (
+        <div className="bg-green-50 border border-green-200 rounded-2xl p-4">
+          <p className="text-sm font-semibold text-green-800">Chave de ingestão criada</p>
+          <p className="text-xs text-green-700 mt-1 font-mono break-all">{createdKey}</p>
+          <p className="text-xs text-green-700 mt-2">Guarde agora. Depois o sistema exibe apenas o prefixo por segurança.</p>
+        </div>
+      )}
+
+      <div className="bg-white rounded-2xl border border-[#e5e5e5] overflow-hidden">
+        <div className="px-5 py-4 border-b border-[#e5e5e5] bg-[#f9f9f9]">
+          <h2 className="font-semibold text-[#1a1c1c] text-sm">Clientes / Tenants</h2>
+          <p className="text-xs text-[#737686] mt-0.5">Provisiona clientes com pipeline, integrações padrão e chave pública</p>
+        </div>
+
+        <div className="divide-y divide-[#f5f5f5]">
+          {loading ? (
+            <div className="flex justify-center py-8"><Loader2 size={20} className="animate-spin text-[#2563eb]" /></div>
+          ) : tenants.length === 0 ? (
+            <p className="px-5 py-8 text-sm text-[#737686] text-center">Nenhum tenant disponível para este usuário.</p>
+          ) : tenants.map((tenant) => (
+            <div key={tenant.id} className="flex items-center gap-3 px-5 py-4">
+              <div className="w-9 h-9 rounded-xl bg-blue-50 text-blue-700 flex items-center justify-center shrink-0">
+                <Building2 size={17} />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-[#1a1c1c] truncate">{tenant.name}</p>
+                <p className="text-xs text-[#737686] truncate">{tenant.slug}{tenant.domain ? ` · ${tenant.domain}` : ""}</p>
+              </div>
+              <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-green-50 text-green-700">{tenant.status}</span>
+            </div>
+          ))}
+        </div>
+
+        <form onSubmit={createTenant} className="grid md:grid-cols-[1fr_150px_1fr_150px_auto] gap-2 px-5 py-4 border-t border-[#e5e5e5] bg-[#f9f9f9]">
+          <input required value={form.name} onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))} placeholder="Nome do cliente"
+            className="px-3 py-2 border border-[#d4d4d4] rounded-xl text-sm focus:ring-2 focus:ring-[#2563eb] outline-none bg-white" />
+          <input value={form.slug} onChange={(e) => setForm((prev) => ({ ...prev, slug: e.target.value }))} placeholder="slug"
+            className="px-3 py-2 border border-[#d4d4d4] rounded-xl text-sm focus:ring-2 focus:ring-[#2563eb] outline-none bg-white" />
+          <input value={form.domain} onChange={(e) => setForm((prev) => ({ ...prev, domain: e.target.value }))} placeholder="dominio.com.br"
+            className="px-3 py-2 border border-[#d4d4d4] rounded-xl text-sm focus:ring-2 focus:ring-[#2563eb] outline-none bg-white" />
+          <select value={form.default_lead_source} onChange={(e) => setForm((prev) => ({ ...prev, default_lead_source: e.target.value }))}
+            className="px-3 py-2 border border-[#d4d4d4] rounded-xl text-sm focus:ring-2 focus:ring-[#2563eb] outline-none bg-white">
+            <option value="site_form">Site</option>
+            <option value="meta_lead_ads">Meta Ads</option>
+            <option value="whatsapp_click">WhatsApp</option>
+            <option value="manual">Manual</option>
+          </select>
+          <button className="flex items-center justify-center gap-1.5 px-4 py-2 bg-[#2563eb] hover:bg-blue-700 text-white rounded-xl text-sm font-semibold transition-colors">
+            <Plus size={15} /> Criar
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 interface TeamMember {
   id: string;
-  name: string;
-  email: string;
-  role: "admin" | "seller";
+  user_id?: string;
+  tenant_id?: string;
+  name?: string;
+  email?: string;
+  role: "super_admin" | "tenant_admin" | "seller";
   active: boolean;
+  crm_tenants?: { id: string; name: string; slug: string };
 }
 
 function PanelTeam() {
-  const [members, setMembers] = useState<TeamMember[]>(() => {
-    const stored = localStorage.getItem("crm_team_members");
-    if (stored) return JSON.parse(stored) as TeamMember[];
-    const currentUser = JSON.parse(localStorage.getItem("crm_user") || "null") as { id?: string; name?: string; email?: string } | null;
-    return currentUser
-      ? [{ id: currentUser.id ?? "admin", name: currentUser.name ?? "Administrador", email: currentUser.email ?? "", role: "admin", active: true }]
-      : [];
-  });
-  const [form, setForm] = useState({ name: "", email: "", role: "seller" as TeamMember["role"] });
+  const [members, setMembers] = useState<TeamMember[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [form, setForm] = useState({ user_id: "", role: "seller" as TeamMember["role"] });
 
-  useEffect(() => {
-    localStorage.setItem("crm_team_members", JSON.stringify(members));
-  }, [members]);
+  const load = async () => {
+    setLoading(true);
+    try {
+      setMembers(await get<TeamMember[]>("/team"));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { load(); }, []);
 
   const addMember = (event: React.FormEvent) => {
     event.preventDefault();
-    if (!form.name.trim() || !form.email.trim()) return;
-    setMembers((prev) => [
-      ...prev,
-      { id: `member-${Date.now()}`, name: form.name.trim(), email: form.email.trim(), role: form.role, active: true },
-    ]);
-    setForm({ name: "", email: "", role: "seller" });
+    if (!form.user_id.trim()) return;
+    post("/team", { user_id: form.user_id.trim(), role: form.role, active: true }).then(async () => {
+      setForm({ user_id: "", role: "seller" });
+      await load();
+    });
   };
 
   return (
@@ -387,37 +500,35 @@ function PanelTeam() {
         </div>
 
         <div className="divide-y divide-[#f5f5f5]">
-          {members.map((member) => (
+          {loading ? (
+            <div className="flex justify-center py-8"><Loader2 size={20} className="animate-spin text-[#2563eb]" /></div>
+          ) : members.map((member) => (
             <div key={member.id} className="flex items-center gap-3 px-5 py-4">
               <div className="w-9 h-9 rounded-full bg-[#2563eb] text-white flex items-center justify-center text-xs font-bold shrink-0">
-                {member.name.split(" ").slice(0, 2).map((part) => part[0]).join("").toUpperCase()}
+                {(member.name ?? member.user_id ?? "U").split(" ").slice(0, 2).map((part) => part[0]).join("").toUpperCase()}
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-[#1a1c1c] truncate">{member.name}</p>
-                <p className="text-xs text-[#737686] truncate">{member.email}</p>
+                <p className="text-sm font-semibold text-[#1a1c1c] truncate">{member.name ?? member.user_id}</p>
+                <p className="text-xs text-[#737686] truncate">{member.email ?? member.crm_tenants?.name ?? member.tenant_id}</p>
               </div>
-              <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${member.role === "admin" ? "bg-blue-50 text-blue-700" : "bg-neutral-100 text-neutral-600"}`}>
-                {member.role === "admin" ? "Admin" : "Vendedor"}
+              <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${member.role !== "seller" ? "bg-blue-50 text-blue-700" : "bg-neutral-100 text-neutral-600"}`}>
+                {member.role === "super_admin" ? "Super admin" : member.role === "tenant_admin" ? "Admin" : "Vendedor"}
               </span>
-              <button
-                onClick={() => setMembers((prev) => prev.map((item) => item.id === member.id ? { ...item, active: !item.active } : item))}
-                className={`relative w-11 h-6 rounded-full transition-colors ${member.active ? "bg-[#2563eb]" : "bg-[#d4d4d4]"}`}
-              >
+              <button className={`relative w-11 h-6 rounded-full transition-colors ${member.active ? "bg-[#2563eb]" : "bg-[#d4d4d4]"}`}>
                 <span className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-transform ${member.active ? "left-6" : "left-1"}`} />
               </button>
             </div>
           ))}
         </div>
 
-        <form onSubmit={addMember} className="grid md:grid-cols-[1fr_1fr_140px_auto] gap-2 px-5 py-4 border-t border-[#e5e5e5] bg-[#f9f9f9]">
-          <input value={form.name} onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))} placeholder="Nome do vendedor"
-            className="px-3 py-2 border border-[#d4d4d4] rounded-xl text-sm focus:ring-2 focus:ring-[#2563eb] outline-none bg-white" />
-          <input type="email" value={form.email} onChange={(e) => setForm((prev) => ({ ...prev, email: e.target.value }))} placeholder="email@empresa.com"
+        <form onSubmit={addMember} className="grid md:grid-cols-[1fr_180px_auto] gap-2 px-5 py-4 border-t border-[#e5e5e5] bg-[#f9f9f9]">
+          <input value={form.user_id} onChange={(e) => setForm((prev) => ({ ...prev, user_id: e.target.value }))} placeholder="UUID do usuário Supabase"
             className="px-3 py-2 border border-[#d4d4d4] rounded-xl text-sm focus:ring-2 focus:ring-[#2563eb] outline-none bg-white" />
           <select value={form.role} onChange={(e) => setForm((prev) => ({ ...prev, role: e.target.value as TeamMember["role"] }))}
             className="px-3 py-2 border border-[#d4d4d4] rounded-xl text-sm focus:ring-2 focus:ring-[#2563eb] outline-none bg-white">
             <option value="seller">Vendedor</option>
-            <option value="admin">Admin</option>
+            <option value="tenant_admin">Admin cliente</option>
+            <option value="super_admin">Super admin</option>
           </select>
           <button className="flex items-center justify-center gap-1.5 px-4 py-2 bg-[#2563eb] hover:bg-blue-700 text-white rounded-xl text-sm font-semibold transition-colors">
             <UserPlus size={15} /> Adicionar
@@ -429,41 +540,151 @@ function PanelTeam() {
 }
 
 function PanelIntegrations() {
-  const [connected, setConnected] = useState<Set<string>>(new Set());
+  const [integrations, setIntegrations] = useState<Integration[]>([]);
+  const [logs, setLogs] = useState<IngestionLog[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [form, setForm] = useState({ type: "site" as Integration["type"], name: "", config: "{}" });
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const [items, logItems] = await Promise.all([
+        get<Integration[]>("/integrations"),
+        get<IngestionLog[]>("/ingestion-logs"),
+      ]);
+      setIntegrations(items);
+      setLogs(logItems);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { load(); }, []);
+
+  const addIntegration = async (event: React.FormEvent) => {
+    event.preventDefault();
+    let config: Record<string, unknown> = {};
+    try {
+      config = JSON.parse(form.config || "{}") as Record<string, unknown>;
+    } catch {
+      alert("Config precisa ser um JSON válido");
+      return;
+    }
+    await post("/integrations", { type: form.type, name: form.name, status: "active", config });
+    setForm({ type: "site", name: "", config: "{}" });
+    await load();
+  };
 
   return (
     <div className="space-y-3">
       <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex gap-3">
         <AlertTriangle size={18} className="text-amber-600 shrink-0 mt-0.5" />
         <p className="text-sm text-amber-800">
-          As integrações abaixo expandem as capacidades do CRM. Conecte ferramentas que sua equipe já usa para centralizar o processo comercial.
+          Integrações agora são configuradas por tenant. Meta usa <strong>page_id/form_id</strong>; WhatsApp usa <strong>phone_number_id</strong>.
         </p>
       </div>
 
-      {INTEGRATIONS.map((intg) => {
-        const isConnected = connected.has(intg.name);
-        return (
-          <div key={intg.name} className="bg-white rounded-2xl border border-[#e5e5e5] p-4 flex items-center gap-4">
-            <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{ backgroundColor: intg.color + "18" }}>
-              <intg.icon size={20} style={{ color: intg.color }} />
+      <div className="bg-white rounded-2xl border border-[#e5e5e5] overflow-hidden">
+        <div className="px-5 py-4 border-b border-[#e5e5e5] bg-[#f9f9f9]">
+          <h2 className="font-semibold text-[#1a1c1c] text-sm">Integrações Ativas</h2>
+          <p className="text-xs text-[#737686] mt-0.5">Mapeamento usado pelos webhooks centrais do CRM</p>
+        </div>
+
+        <div className="divide-y divide-[#f5f5f5]">
+          {loading ? (
+            <div className="flex justify-center py-8"><Loader2 size={20} className="animate-spin text-[#2563eb]" /></div>
+          ) : integrations.length === 0 ? (
+            <p className="px-5 py-8 text-sm text-[#737686] text-center">Nenhuma integração cadastrada.</p>
+          ) : integrations.map((intg) => (
+          <div key={intg.id} className="p-4 flex items-center gap-4">
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 bg-blue-50 text-blue-700">
+              <Puzzle size={20} />
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-semibold text-[#1a1c1c]">{intg.name}</p>
-              <p className="text-xs text-[#737686]">{intg.desc}</p>
+              <p className="text-xs text-[#737686]">{intg.type} · último evento: {intg.last_event_at ? new Date(intg.last_event_at).toLocaleString("pt-BR") : "sem eventos"}</p>
             </div>
-            <button
-              onClick={() => setConnected((prev) => { const s = new Set(prev); isConnected ? s.delete(intg.name) : s.add(intg.name); return s; })}
-              className={`px-4 py-2 rounded-xl text-xs font-semibold transition-colors ${
-                isConnected
-                  ? "bg-green-50 text-green-700 border border-green-200 hover:bg-red-50 hover:text-red-600 hover:border-red-200"
-                  : "bg-[#2563eb] text-white hover:bg-blue-700"
-              }`}
-            >
-              {isConnected ? "✓ Conectado" : "Conectar"}
-            </button>
+            <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${intg.status === "active" ? "bg-green-50 text-green-700" : intg.status === "error" ? "bg-red-50 text-red-600" : "bg-neutral-100 text-neutral-600"}`}>
+              {intg.status}
+            </span>
           </div>
-        );
-      })}
+          ))}
+        </div>
+
+        <form onSubmit={addIntegration} className="grid md:grid-cols-[140px_1fr_1.2fr_auto] gap-2 px-5 py-4 border-t border-[#e5e5e5] bg-[#f9f9f9]">
+          <select value={form.type} onChange={(e) => setForm((prev) => ({ ...prev, type: e.target.value as Integration["type"] }))}
+            className="px-3 py-2 border border-[#d4d4d4] rounded-xl text-sm focus:ring-2 focus:ring-[#2563eb] outline-none bg-white">
+            <option value="site">Site</option>
+            <option value="meta">Meta</option>
+            <option value="whatsapp">WhatsApp</option>
+            <option value="webhook">Webhook</option>
+            <option value="manual">Manual</option>
+          </select>
+          <input required value={form.name} onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))} placeholder="Nome da integração"
+            className="px-3 py-2 border border-[#d4d4d4] rounded-xl text-sm focus:ring-2 focus:ring-[#2563eb] outline-none bg-white" />
+          <input value={form.config} onChange={(e) => setForm((prev) => ({ ...prev, config: e.target.value }))} placeholder='{"form_id":"123"}'
+            className="px-3 py-2 border border-[#d4d4d4] rounded-xl text-sm focus:ring-2 focus:ring-[#2563eb] outline-none bg-white font-mono" />
+          <button className="flex items-center justify-center gap-1.5 px-4 py-2 bg-[#2563eb] hover:bg-blue-700 text-white rounded-xl text-sm font-semibold transition-colors">
+            <Plus size={15} /> Adicionar
+          </button>
+        </form>
+      </div>
+
+      <div className="bg-white rounded-2xl border border-[#e5e5e5] overflow-hidden">
+        <div className="px-5 py-4 border-b border-[#e5e5e5] bg-[#f9f9f9]">
+          <h2 className="font-semibold text-[#1a1c1c] text-sm">Últimos eventos de ingestão</h2>
+        </div>
+        <div className="divide-y divide-[#f5f5f5]">
+          {logs.slice(0, 8).map((log) => (
+            <div key={log.id} className="px-5 py-3 flex items-center gap-3">
+              <span className={`w-2 h-2 rounded-full ${log.status === "created" ? "bg-green-500" : log.status === "duplicate" ? "bg-amber-500" : log.status === "error" || log.status === "rejected" ? "bg-red-500" : "bg-blue-500"}`} />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-[#1a1c1c]">{log.source} · {log.status}</p>
+                <p className="text-xs text-[#737686] truncate">{log.message ?? "Sem mensagem"}</p>
+              </div>
+              <span className="text-xs text-[#737686]">{new Date(log.created_at).toLocaleString("pt-BR")}</span>
+            </div>
+          ))}
+          {!logs.length && <p className="px-5 py-8 text-sm text-[#737686] text-center">Nenhum evento registrado.</p>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PanelIngestionLogs() {
+  const [logs, setLogs] = useState<IngestionLog[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    get<IngestionLog[]>("/ingestion-logs")
+      .then(setLogs)
+      .finally(() => setLoading(false));
+  }, []);
+
+  return (
+    <div className="bg-white rounded-2xl border border-[#e5e5e5] overflow-hidden">
+      <div className="px-5 py-4 border-b border-[#e5e5e5] bg-[#f9f9f9]">
+        <h2 className="font-semibold text-[#1a1c1c] text-sm">Logs de Ingestão</h2>
+        <p className="text-xs text-[#737686] mt-0.5">Auditoria dos leads recebidos por site, Meta, WhatsApp e API</p>
+      </div>
+      {loading ? (
+        <div className="flex justify-center py-8"><Loader2 size={20} className="animate-spin text-[#2563eb]" /></div>
+      ) : (
+        <div className="divide-y divide-[#f5f5f5]">
+          {logs.map((log) => (
+            <div key={log.id} className="px-5 py-4 flex items-center gap-3">
+              <span className={`w-2.5 h-2.5 rounded-full ${log.status === "created" ? "bg-green-500" : log.status === "duplicate" ? "bg-amber-500" : log.status === "error" || log.status === "rejected" ? "bg-red-500" : "bg-blue-500"}`} />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-[#1a1c1c]">{log.source} · {log.status}</p>
+                <p className="text-xs text-[#737686] truncate">{log.message ?? "Evento recebido"}</p>
+              </div>
+              <span className="text-xs text-[#737686] shrink-0">{new Date(log.created_at).toLocaleString("pt-BR")}</span>
+            </div>
+          ))}
+          {logs.length === 0 && <p className="px-5 py-8 text-sm text-[#737686] text-center">Nenhum log encontrado.</p>}
+        </div>
+      )}
     </div>
   );
 }
@@ -507,6 +728,7 @@ function PanelSegments() {
 
 // ─── Main Settings Page ───────────────────────────────────────────────────────
 const MENU: { id: SettingsTab; label: string; Icon: React.ElementType; desc: string; group: string }[] = [
+  { id: "tenants",        label: "Clientes CRM",        Icon: Building2,         desc: "Provisionamento de tenants",             group: "Infraestrutura" },
   { id: "stages",         label: "Etapas do Pipeline",  Icon: SlidersHorizontal, desc: "Gerencie as etapas do funil",           group: "Pipeline" },
   { id: "goals",          label: "Metas",               Icon: Target,            desc: "Padrões de meta de mercado",             group: "Pipeline" },
   { id: "loss_reasons",   label: "Motivos de Perda",    Icon: XCircle,           desc: "Por que negócios são perdidos",          group: "Pipeline" },
@@ -514,6 +736,7 @@ const MENU: { id: SettingsTab; label: string; Icon: React.ElementType; desc: str
   { id: "team",           label: "Equipe",              Icon: Users,             desc: "Usuários, vendedores e permissões",       group: "Sistema" },
   { id: "preferences",    label: "Preferências",        Icon: Database,          desc: "Configurações gerais do CRM",            group: "Sistema" },
   { id: "integrations",   label: "Integrações",         Icon: Puzzle,            desc: "Conecte ferramentas externas",           group: "Sistema" },
+  { id: "ingestion_logs", label: "Logs de Ingestão",    Icon: BarChart2,         desc: "Auditoria de entradas de leads",          group: "Sistema" },
   { id: "email_templates",label: "Modelos de E-mail",   Icon: Mail,              desc: "Templates para comunicação",             group: "Comunicação" },
 ];
 
@@ -524,6 +747,7 @@ export function SettingsStages() {
 
   const renderPanel = () => {
     switch (activeTab) {
+      case "tenants":        return <PanelTenants />;
       case "stages":         return <PanelStages />;
       case "goals":          return <PanelGoals />;
       case "loss_reasons":   return <PanelLossReasons />;
@@ -531,6 +755,7 @@ export function SettingsStages() {
       case "integrations":   return <PanelIntegrations />;
       case "segments":       return <PanelSegments />;
       case "team":           return <PanelTeam />;
+      case "ingestion_logs": return <PanelIngestionLogs />;
       case "email_templates":
         return (
           <div className="bg-white rounded-2xl border border-[#e5e5e5] p-8 text-center text-[#737686]">

@@ -1,9 +1,4 @@
--- ─────────────────────────────────────────────────────────────────────────────
--- Metry CRM — Schema
--- Run in Supabase Dashboard → SQL Editor (project: lomhqleirhbwvuzbfyph)
--- ─────────────────────────────────────────────────────────────────────────────
 
--- CRM Stages (pipeline columns, fully customizable)
 CREATE TABLE IF NOT EXISTS crm_stages (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   label TEXT NOT NULL,
@@ -23,7 +18,6 @@ INSERT INTO crm_stages (label, color, position, is_won, is_lost) VALUES
   ('Perdido',     '#ef4444', 5, FALSE, TRUE)
 ON CONFLICT DO NOTHING;
 
--- Organizations (clientes / empresas)
 CREATE TABLE IF NOT EXISTS crm_organizations (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name TEXT NOT NULL,
@@ -38,7 +32,6 @@ CREATE TABLE IF NOT EXISTS crm_organizations (
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Contacts (pessoas dentro de organizações)
 CREATE TABLE IF NOT EXISTS crm_contacts (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   organization_id UUID REFERENCES crm_organizations(id) ON DELETE CASCADE,
@@ -50,7 +43,6 @@ CREATE TABLE IF NOT EXISTS crm_contacts (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Opportunities (negócios no pipeline)
 CREATE TABLE IF NOT EXISTS crm_opportunities (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   title TEXT NOT NULL,
@@ -66,7 +58,6 @@ CREATE TABLE IF NOT EXISTS crm_opportunities (
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Activities (histórico de interações)
 CREATE TABLE IF NOT EXISTS crm_activities (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   opportunity_id UUID REFERENCES crm_opportunities(id) ON DELETE CASCADE,
@@ -77,7 +68,6 @@ CREATE TABLE IF NOT EXISTS crm_activities (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Tasks (follow-up / próximas ações)
 CREATE TABLE IF NOT EXISTS crm_tasks (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   title TEXT NOT NULL,
@@ -90,7 +80,6 @@ CREATE TABLE IF NOT EXISTS crm_tasks (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Indexes for performance
 CREATE INDEX IF NOT EXISTS idx_crm_orgs_owner ON crm_organizations(owner_id);
 CREATE INDEX IF NOT EXISTS idx_crm_opps_stage ON crm_opportunities(stage_id);
 CREATE INDEX IF NOT EXISTS idx_crm_opps_owner ON crm_opportunities(owner_id);
@@ -98,3 +87,4 @@ CREATE INDEX IF NOT EXISTS idx_crm_opps_org ON crm_opportunities(organization_id
 CREATE INDEX IF NOT EXISTS idx_crm_activities_opp ON crm_activities(opportunity_id);
 CREATE INDEX IF NOT EXISTS idx_crm_tasks_assigned ON crm_tasks(assigned_to, completed, due_date);
 CREATE INDEX IF NOT EXISTS idx_crm_contacts_org ON crm_contacts(organization_id);
+;

@@ -6,6 +6,10 @@ interface User {
   id: string;
   email: string;
   name: string;
+  tenant_id?: string;
+  role?: "super_admin" | "tenant_admin" | "seller";
+  is_super_admin?: boolean;
+  tenants?: Array<{ tenant_id: string; role: string; crm_tenants?: { id: string; name: string; slug: string } }>;
 }
 
 interface AuthCtx {
